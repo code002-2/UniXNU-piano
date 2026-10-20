@@ -1,9 +1,19 @@
 # Kernel configuration of the piano image. CONFIG_XNU_<NAME> becomes XNU_<NAME> for the kernel build.
 #
-# Mirrors sheng's configuration, which is the only known-good non-Apple ARM64
-# target, with the sheng-only pieces removed. The goal of the first pass is the
-# same as sheng's first pass: reach the video console and report the genuine
-# missing-driver panic, not a full userland boot.
+# First pass: bring the source-built 4 KiB-page XNU up to the video console on
+# the tablet and report the genuine missing-driver panic. That is the same
+# milestone the sheng port used, and it deliberately leaves out every component
+# that only the original userland image needs.
+#
+# The build script enforces a dependency graph between these switches, so the
+# set below is closed under it:
+#
+#   ARMCPU            needs SOURCE_CORECRYPTO14 and a real platform driver
+#   SOURCE_PTHREAD    needs SOURCE_CORECRYPTO14
+#   SOURCE_MOCKFS     needs ARMCPU and SOURCE_PTHREAD
+#   NATIVE_AES        needs CRYPTO_BOOTSTRAP=prelinked and SOURCE_CORECRYPTO14
+#   NATIVE_RAM_BLOCK  needs NATIVE_AES
+#   NATIVE_ARCH_TIMER needs ARMCPU
 
 CONFIG_XNU_SOURCE_CORECRYPTO14=y
 CONFIG_XNU_SOURCE_PTHREAD=y
@@ -15,35 +25,47 @@ CONFIG_XNU_NATIVE_RAM_BLOCK=y
 CONFIG_XNU_TRUST_CACHE_RUNTIME=y
 CONFIG_XNU_SOURCE_MOCKFS=y
 CONFIG_XNU_NATIVE_CS_HASH_CACHE=y
-CONFIG_XNU_OWNER_ROOT_AUDIT=y
-CONFIG_XNU_OWNER_ROOT_TRUST=y
-CONFIG_XNU_OWNER_CACHE_MOUNT=y
-CONFIG_XNU_OWNER_CACHE_STARTUP=y
-CONFIG_XNU_OWNER_BOOT_MANIFEST=y
-CONFIG_XNU_OWNER_DATA_MOUNT=y
-CONFIG_XNU_OWNER_UNION_SYSTEMOS=y
 CONFIG_XNU_DT_PANIC_REGION=y
 CONFIG_XNU_ZONE_PGZ_ALIGNMENT_PROBE=y
 CONFIG_XNU_NATIVE_ARCH_TIMER=y
 CONFIG_XNU_NATIVE_PAN=y
-CONFIG_XNU_BOOT_PROGRESS=y
 CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y
 
 CONFIG_XNU_CRYPTO_BOOTSTRAP="prelinked"
-# Pending: a scratch Data volume UUID has to be generated for this board.
-# sheng's value is deliberately not reused, because it names an existing volume.
-CONFIG_XNU_OWNER_DATA_VOLUME_UUID="00000000-0000-0000-0000-000000000000"
 CONFIG_XNU_EXTRA_LD_ARCHIVES=""
 
-# Not enabled for the first pass:
-#   SHENG_PMGR           the PMGR/clock integration of sheng's UFS root path
-#   VERIFIED_ROOT_PROBE  needs build/verified-root-os-xnu-bundle from sheng's kit
-#   NATIVE_VIRTIO_BLOCK  no virtio transport on this board
-#   NATIVE_MOBILE_DISPLAY  sheng's SM8550 DPU driver, the panel path is different
-#   NATIVE_ADRENO        sheng's A740 GPU kit, piano has an Adreno 830
-CONFIG_XNU_SHENG_PMGR=n
+# Off for the first pass, and each one names the component it needs:
+#
+#   OWNER_ROOT_AUDIT     requires VERIFIED_ROOT_PROBE, which needs the sheng
+#                        verified-root archive; that archive is built by sheng's
+#                        own kits, not by anything piano has.
+#   OWNER_ROOT_TRUST     requires OWNER_ROOT_AUDIT and NATIVE_VIRTIO_BLOCK.
+#   OWNER_CACHE_*        require OWNER_ROOT_TRUST (mounting the original root).
+#   OWNER_BOOT_MANIFEST  requires OWNER_CACHE_STARTUP.
+#   OWNER_DATA_MOUNT     requires OWNER_BOOT_MANIFEST.
+#   OWNER_UNION_SYSTEMOS requires OWNER_CACHE_STARTUP.
+#   BOOT_PROGRESS        requires OWNER_ROOT_AUDIT and NATIVE_VIRTIO_BLOCK.
+#   NATIVE_VIRTIO_BLOCK  there is no virtio transport on this board.
+#   SHENG_PMGR           sheng's SM8550 PMGR/clock integration.
+#   NATIVE_MOBILE_DISPLAY sheng's SM8550 DPU driver; piano is sm8750-dpu.
+#   NATIVE_ADRENO        sheng's A740 GPU kit; piano has an Adreno 830.
 CONFIG_XNU_VERIFIED_ROOT_PROBE=n
+CONFIG_XNU_OWNER_ROOT_AUDIT=n
+CONFIG_XNU_OWNER_ROOT_TRUST=n
+CONFIG_XNU_OWNER_CACHE_MOUNT=n
+CONFIG_XNU_OWNER_CACHE_STARTUP=n
+CONFIG_XNU_OWNER_BOOT_MANIFEST=n
+CONFIG_XNU_OWNER_DATA_MOUNT=n
+CONFIG_XNU_OWNER_UNION_SYSTEMOS=n
+CONFIG_XNU_BOOT_PROGRESS=n
 CONFIG_XNU_NATIVE_VIRTIO_BLOCK=n
+CONFIG_XNU_NATIVE_VIRTIO_CONSOLE=n
+CONFIG_XNU_SHENG_PMGR=n
 CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
 CONFIG_XNU_NATIVE_ADRENO=n
 CONFIG_XNU_ARMVIRT_PLATFORM=n
+
+# Kept because the guards read it even when OWNER_DATA_MOUNT is off. A scratch
+# Data volume UUID has to be generated once the userland path is enabled;
+# sheng's value is deliberately not reused, because it names an existing volume.
+CONFIG_XNU_OWNER_DATA_VOLUME_UUID="00000000-0000-0000-0000-000000000000"

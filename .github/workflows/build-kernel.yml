@@ -73,6 +73,17 @@ jobs:
         working-directory: UniXNU
         run: ./unixnu ipsw fetch
 
+      - name: Assemble the tree and build the display probe archive
+        working-directory: UniXNU
+        # bsd_init.c declares the display probe hooks under
+        # '#if DEVELOPMENT || DEBUG', which the kernel configuration always
+        # takes, so they must resolve even though piano has no display provider
+        # yet. stubs/PianoDisplayProbe.c supplies the 'no provider' versions and
+        # configs/*_defconfig link it through CONFIG_XNU_EXTRA_LD_ARCHIVES.
+        run: |
+          ./unixnu tree
+          bash ../UniXNU-piano/scripts/build-piano-display-stub.sh out/piano/tree ../UniXNU-piano
+
       - name: Seed kernel build for the corecrypto symbol table
         working-directory: UniXNU
         # build-corecrypto-14.py --namespace reads the kernel's undefined symbols

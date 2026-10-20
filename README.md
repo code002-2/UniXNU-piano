@@ -55,13 +55,21 @@ pin sheng records as well — verified by extracting it from Apple's CDN.
 The kernel step needs macOS with Xcode, so it runs in CI:
 
 ```sh
-gh workflow run build-kernel
+gh workflow run build-piano-kernel
 ```
 
 Download `piano-kernel` from the run and read `kernel.macho` plus its sha256.
 
 ## Status
 
-The board description, the kernel configuration and the device tree generator
-are in place and the `unixnu` driver accepts them. The kernel has not been built
-yet; `LINUX-BUILD.md` records how far a macOS-free build got and why it stops.
+The device tree generator and the board description are in place and accepted by
+the `unixnu` driver. The XNU kernel **builds and prelinks** in CI: 51,806,208
+bytes, ARM64 `MH_EXECUTE`, linked with the namespaced source corecrypto provider
+and the `ArmDTPlatform` and `ArmCpu` drivers from the base repository.
+
+Nothing has run on the tablet yet. The prelink tool calls its own output an
+"experimental candidate ... runtime unqualified", and that is the accurate
+description: the next steps are the payload, the boot image, and adding
+`DarwinBoot` and the UniXNU boot manager to the SunUEFI `pianoPkg` firmware.
+`KERNEL-BUILD.md` records the build, and `LINUX-BUILD.md` records how far a
+macOS-free build got and why it stops at MIG.

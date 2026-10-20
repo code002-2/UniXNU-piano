@@ -66,6 +66,37 @@ replace those 49 patches instead of adding to them).
 The consequence is stated plainly: the kernel references a display path that does
 nothing, so there is no on-screen console until a real provider replaces it.
 
+## Built
+
+Run [39403317018](https://github.com/code002-2/UniXNU-piano/actions/runs/39403317018)
+finished the whole chain in 9m12s on `macos-latest` (Xcode 26.6, iPhoneOS 26.5 SDK):
+
+| Artifact | Size | Note |
+| --- | --- | --- |
+| `kernel.macho` | 51,806,208 B | prelinked kernel, sha256 `6912319adf0b623eb04987f2dbd29c4b5c9f97ca18b469571bd67c7815c86c07` |
+| `mach.development.bcm2837.unstripped.noctf` | 18,961,024 B | the native kernel before prelink |
+| `mach.development.bcm2837.a` | 128,989,576 B | the kernel's static archive |
+
+Both Mach-O images are `cputype 0x100000c` (ARM64), `filetype 2` (`MH_EXECUTE`).
+
+`mach.development.bcm2837.linkarchives` shows exactly what the link consumed:
+
+```
+-L.../.cache/fakeroot/usr/local/lib/kernel -lfirehose_kernel
+  .../build/corecrypto-2023/libcorecrypto_kernel_noasm-namespaced.a
+  -Wl,-force_load,.../build/armdt-platform/libArmDTPlatform.a
+  -Wl,-force_load,.../build/armcpu/libArmCpu.a
+```
+
+The prelink tool describes its own output honestly, and that wording matters:
+
+```
+Experimental candidate: 51806208 bytes; executable bytes unchanged; runtime unqualified
+```
+
+So the kernel exists and is prelinked against the iPad7,1 kernelcache, but nothing
+about it has been validated on hardware yet.
+
 ## Still missing
 
 - A real legacy display provider, for the reason above.

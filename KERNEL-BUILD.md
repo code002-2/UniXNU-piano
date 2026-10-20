@@ -179,6 +179,61 @@ device tree to the kernel, so it cannot reproduce this device's image; SunUEFI
 builds the boot image its own way and ships `PianoUEFI-product.img`, which is
 what a boot attempt should use.
 
+## First boot on hardware
+
+`fastboot boot PianoUEFI-product.img` ran on the tablet and reached UniXNU's own
+UI, which proves the integration works end to end: BDS started the UniXNU
+application, and UniXNU drew its menu and logo.
+
+The screen showed two interfaces at once, which is worth knowing before reading a
+photo of it:
+
+- **UniXNU's menu**, identified from its source: `Ui.c:301` prints
+  `"UniXNU %a  |  %s"`, `Config.c:1545` sets the label `"built-in configuration"`,
+  and the entries `Return to firmware action` are a title plus its type column.
+- **SunUEFI's ProductCore boot log**, identified by
+  `uefi/core/PianoProductBootLog.c:16`:
+  `mNames[]={"DISPLAY","PAYLOAD","SMEM","INPUT","UFS","USB","MENU"}`.
+
+That log is the diagnosis. `State()` maps `EFI_SUCCESS` to `OK`,
+`EFI_NOT_STARTED` to `WAIT`, `EFI_NOT_READY` to `NOT READY`. It showed
+`DISPLAY OK`, `PAYLOAD OK`, `INPUT OK`, `SMEM NOT READY 675 mS 0x8000000000000006`,
+`UFS WAIT 689 mS`.
+
+`PianoProductCore.c` explains what that means:
+
+```c
+BootLogStage("SMEM",EFI_NOT_STARTED);
+Status=PianoProductObserveSmem();BootLogStage("SMEM",Status);
+if(PianoProductSmemRetained())FailStop(Status);      // SMEM alone is not fatal
+...
+BootLogStage("UFS",EFI_NOT_STARTED);
+PianoUfsSetProbeAction(InitUfs);PianoProbeUfs(Fdt);BootLogStage("UFS",mUfsStatus);
+if(!mUfsAttempted || !mUfsStarted)FailStop(mUfsStatus);   // this is where it stops
+```
+
+`UFS` stayed `EFI_NOT_STARTED`, so the deferred `InitUfs` probe never ran and no
+storage was published. With no published FAT volume, UniXNU's
+`UniXNUConfigLoad` finds nothing on any SimpleFileSystem handle and falls back to
+the built-in configuration, which is why the menu offered only built-in actions.
+
+So the payload placement is not the problem; the firmware's storage bring-up in
+this boot path is. The product candidate says so itself:
+`prepare_product.py:492` labels the artifact `INCOMPLETE_NOT_RELEASE`, the
+manifest ends with `device_boot_performed: false`, and
+`docs/piano-boot-file-source.md` states the manifest reports
+`COMPILED_PLATFORM_NOT_READY`.
+
+Two consequences for the next attempt:
+
+- The UEFI Fastboot service cannot help here: it exits when the firmware hands
+  control to the boot manager, so once UniXNU's menu is up there is no log
+  channel and SSH is gone with it. Screen photographs are the only sensor.
+- SMEM observation (`PianoProductObserveSmem`) requires the GCD to describe an
+  exact Reserved+UC window at `PIANO_SMEM_BASE` and an MMIO+UC cookie range; a
+  memory map that differs from what `MemoryMapLib` publishes reports
+  `EFI_NOT_READY` without retaining anything.
+
 ## Still missing
 
 - A real legacy display provider, for the reason above.

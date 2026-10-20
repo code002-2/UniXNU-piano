@@ -97,6 +97,42 @@ Experimental candidate: 51806208 bytes; executable bytes unchanged; runtime unqu
 So the kernel exists and is prelinked against the iPad7,1 kernelcache, but nothing
 about it has been validated on hardware yet.
 
+## Payload
+
+`unixnu build payload` runs on Linux, so it runs on the tablet itself with the
+kernel the CI produced:
+
+```
+./unixnu build payload --unique-chip-id 5049414E4F000001
+payload: out/piano/payload/payload.img (192 MiB)
+```
+
+The volume is called `PIANOESP`, the FAT serial is `5348-4E47` (the marker
+UniXNU writes), and it holds `EFI/UniXNU/unixnu.toml` plus an `xnu` entry that
+names `Payloads/kernel.macho` and the kernel arguments from `board.toml`.
+`payload.json` records every input hash and ends with `"hardware_tested": false`.
+
+Two inputs are still absent and the volume is built without them:
+
+- **trust cache.** The two `.trustcache` files extracted from the IPSW hash to
+  `9742f3d5…` (Cryptex1,SystemTrustCache) and `4563bdbf…` (StaticTrustCache).
+  The two hashes sheng accepts, `7416ca4f…` and `8900d6a9…`, are neither of
+  them: sheng's board accepts a bundle built around those files, and the script
+  that builds it is part of the sheng family. So `board.toml` accepts no bundle
+  yet and the payload carries no `kernel.macho.trustcache`.
+- **Data seed.** Nothing supplies `--data-ramdisk`, so the payload has no
+  `Payloads/scratch-data.img` and `payload.adt.packed_data_ramdisk` stays inert.
+
+`--unique-chip-id 5049414E4F000001` is a bring-up seed chosen for this port, not
+a platform seed read from the device. It only seeds `IOPlatformUUID` and the
+`/chosen/unique-chip-id` property; it is not an Apple silicon identity and
+nothing verifies it against hardware.
+
+The panic screen is off. `payload.panic_screen` needs
+`scripts/patch-xnu-entry-probe.py`, which exists only in UniXNU-sheng together
+with `scripts/xnu-panic-screen.c`, and it draws through the legacy display path
+that is a no-op on this board.
+
 ## Still missing
 
 - A real legacy display provider, for the reason above.

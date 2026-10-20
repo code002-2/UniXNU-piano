@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   kernel:
-    runs-on: macos-14          # Apple Silicon, Xcode 15.x with the iOS 17 SDK
+    runs-on: macos-latest       # Apple Silicon; the newest Xcode, which is what UniXNU tracks
     timeout-minutes: 240
 
     steps:
@@ -38,6 +38,9 @@ jobs:
           uname -m
           xcodebuild -version
           xcode-select -p
+          ls /Applications | grep -i '^Xcode' || true
+          xcrun -sdk iphoneos -find mig || echo 'mig not found for iphoneos'
+          xcrun -sdk iphoneos -find iig || echo 'iig not found for iphoneos'
 
       - name: Install the host tools
         run: |

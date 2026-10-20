@@ -318,6 +318,48 @@ which is why UniXNU never saw a volume and kept falling back to its built-in
 configuration. Everything downstream of storage — the payload, DarwinBoot and the
 kernel — is blocked on this one limitation.
 
+## Carrying the payload in the ramdisk
+
+Storage is blocked, so the payload was moved out of storage entirely. The boot
+image already carries a ramdisk, and the bootloader records its range in
+`/chosen/linux,initrd-start` .. `-end`, which the firmware can read because
+BootShim stores the device tree pointer at `0xA7FFF000` (`Record[1]`, see
+`uefi/handoff/bootshim/BootShim.S` and `LinuxRamBoot.c:224`).
+
+The pieces:
+
+- `tools/package_product.py` appends `artifacts/xnu-payload/payload-fat.img` to
+  the SimpleInit app payload and seals it with a 24-byte tag holding
+  `PIANOXNURAMDISK\0` and the length, so the layout is
+  `[app payload][FAT image][tag]`. The verification step was updated to compare
+  the appended ramdisk rather than the app payload.
+- `uefi/platforms/pianoProbePkg/Drivers/PianoXnuPayloadDisk/` publishes that FAT
+  image as a read-only `BlockIo` with a `HW_MEMMAP_DP` device path. The existing
+  `DiskIoDxe`, `PartitionDxe` and `Fat` then bind to it and a FAT volume appears
+  with the usual `\EFI\UniXNU` tree.
+- The FAT image itself is built with mtools, because dosfstools is not installed
+  on the tablet; it holds `kernel.macho`, `kernel.macho.adt` and `unixnu.toml`.
+
+The resulting image is 90,152,960 bytes, which fits the 96 MiB `boot_b`
+partition.
+
+## The MCQ veto may be wrong
+
+`LinkReady()` returned `EFI_UNSUPPORTED` whenever bit 0 of `HCI+0x300` was set,
+reading the bit as "the controller uses MCQ, so legacy doorbells are unusable".
+The panel showed exactly that status from the probe tag work.
+
+`blu-sharky/piano-uefi` drives this same SM8750 controller through the generic
+UFSHCI stack (`UfsPlatformDxe.c`: NonDiscoverablePciDevice + UfsPciHc +
+UfsPassThru + ScsiDisk, legacy doorbells only) and never consults that bit. Its
+comments record that the controller is found **enabled, with the device present
+and the link up**, and they only fix up the SMMU routing, the armed request lists,
+HIBERN8 and the device's low-power state.
+
+So the veto was removed and the value is only logged now
+(`SUNUEFI_UFS_QUEUE_MODE ... legacy_doorbells_assumed=1`). Whether the doorbells
+actually work is the next thing the panel reports.
+
 ## Still missing
 
 - A real legacy display provider, for the reason above.

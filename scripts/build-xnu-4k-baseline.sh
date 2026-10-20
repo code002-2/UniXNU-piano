@@ -66,14 +66,6 @@ void native_legacy_display_probe(void)
 {
 	kprintf("piano: native_legacy_display_probe: no display provider on this board yet\n");
 }
-void native_mobile_graphics_client_probe(void)
-{
-	kprintf("piano: native_mobile_graphics_client_probe: no display provider on this board yet\n");
-}
-void native_mobile_graphics_probe_checkpoint(void)
-{
-	kprintf("piano: native_mobile_graphics_probe_checkpoint: mobile graphics path\n");
-}
 PIANO_DISPLAY_STUB
 fi
 export XNU_AVAILABILITY_PL=$ROOT/.cache/fakeroot/usr/local/libexec/availability.pl

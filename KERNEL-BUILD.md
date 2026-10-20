@@ -284,6 +284,40 @@ and a 12-byte `iommus` for `/soc/ufshc@1d84000`, while the Linux-facing DT carri
 panel must be fed a different DT than the one Linux sees, and the temporary path
 does not provide it.
 
+## The firmware cannot reach storage: the controller runs MCQ
+
+After the DT gate was relaxed, `PianoProbeUfs` finally ran and the panel changed
+from `UFS FAILED 0x…21` to `UFS UNAVAILABLE 0x…03`. That status is
+`EFI_UNSUPPORTED` and it is not one of the probe's own tags, so it came from
+`PianoUfsReadOnlyDmaExperiment`, specifically the first check in `LinkReady()`:
+
+```c
+STATIC EFI_STATUS LinkReady(VOID) {
+  UINT32 MemoryConfig=Read(0x300);
+  DEBUG((DEBUG_WARN,"SUNUEFI_UFS_QUEUE_MODE mem_cfg=%08x mcq=%u\n",MemoryConfig,(MemoryConfig&1)!=0));
+  if(MemoryConfig&1)return EFI_UNSUPPORTED;
+```
+
+The UFS controller on this tablet is in MCQ mode (the multi-queue mode UFS 4.0
+adds), and the driver supports only the legacy single doorbell pair. This is
+deliberate, not an oversight — `Quiesce()` repeats the refusal with "Legacy
+queues only; never claim MCQ halt", and `docs/ufs-ebs-lifecycle.md` states that
+MCQ returns Unsupported because legacy registers must not be used to pretend a
+MCQ halt happened.
+
+Two things were established around it:
+
+- A **cold boot does not help.** Powering the tablet fully off and on again still
+  reports MCQ, so this is the controller's default state on this hardware rather
+  than something a previous OS left behind.
+- The earlier `SMEM NOT READY` is a separate and, by the code, non-fatal
+  observation: `PianoProductCore.c` only stops there if ownership was retained.
+
+So the product candidate cannot read the internal UFS on this device at all,
+which is why UniXNU never saw a volume and kept falling back to its built-in
+configuration. Everything downstream of storage — the payload, DarwinBoot and the
+kernel — is blocked on this one limitation.
+
 ## Still missing
 
 - A real legacy display provider, for the reason above.

@@ -247,6 +247,43 @@ is wrong: `piano.dsc` sets `PcdEmuVariableNvModeEnable|TRUE`, so UEFI variables
 are emulated in RAM and do not survive a power cycle. The whole difference was
 the overwritten copy.
 
+## The temporary boot path does not bring up storage
+
+The first boot stopped at `UFS WAIT` → `FailStop` → `CpuDeadLoop`, so no volume
+was published and UniXNU fell back to its built-in configuration. The obvious
+question was whether the local build was at fault, so the official CI artifact
+was tried next.
+
+| Image | Bytes | sha256 | Panel |
+| --- | --- | --- | --- |
+| local `build.sh uefi` | 28,897,280 | `43edda5a…` | `SMEM NOT READY`, `UFS WAIT` |
+| CI `SunUEFI-UEFI-Fastboot(MembootTest)-debian-gnome-3a1d37a2…` | 28,856,320 | `ed9815698d1e6ca06e5dfbc27c93a0f64e6bd38fd5d99e4700e4ab1846ab5954` | `SMEM NOT READY`, `UFS WAIT` |
+
+Both fail identically. The downloaded artifact was taken from the successful run
+[39325589338](https://github.com/slwyts/Project-SunUEFI/actions/runs/39325589338),
+so it is the maintainer's own build, produced in their `sunuefi-builder`
+container. The blocker is therefore the temporary `fastboot boot` path itself,
+not the local build and not the UniXNU integration.
+
+Two things support that reading:
+
+- CI's `uefi` target is `./build.sh uefi`, then `./build.sh module`, then
+  `./build.sh installer --product artifacts/product/PianoUEFI-product.img`. The
+  downloadable temporary image is the *installer* output, which is what the
+  table's second row is; booting `artifacts/product/PianoUEFI-product.img`
+  directly is not the documented artifact.
+- `docs/user/temporary-boot.md` says the temporary load does not install Linux,
+  that entering Linux needs `sunuefi_esp` and `sunuefi_root` to exist already,
+  and that "USB 调试接口仍可能无法连接；查询失败时不要据此判断固件一定没有运行".
+
+So the supported way to run a modified firmware is the install path (the Android
+module rewrites the combined BOOT image), not a temporary load. That is also what
+`PianoProbeUfs` implies: its `Controller(Fdt)` gate wants an exact 8-cell `reg`
+and a 12-byte `iommus` for `/soc/ufshc@1d84000`, while the Linux-facing DT carries
+`reg = <0x1d84000 0x3000>` and an empty `iommus`. The firmware that reaches the
+panel must be fed a different DT than the one Linux sees, and the temporary path
+does not provide it.
+
 ## Still missing
 
 - A real legacy display provider, for the reason above.

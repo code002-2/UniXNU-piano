@@ -1,24 +1,21 @@
-# Seed configuration: exists only to give the corecrypto namespacing a kernel to
-# read symbols from.
+# Seed configuration: produces the kernel binary whose undefined symbols the
+# corecrypto namespacing needs.
 #
-# scripts/build-corecrypto-14.py --namespace compares the plain provider's
-# undefined symbols against the kernel's (it runs `xcrun nm -U` on
-# build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf)
-# and then defines the colliding names to a cc14_ prefix. That kernel cannot
-# exist before the archive does, because a crypto-enabled build refuses to link
-# without it (the build script tests for the archive), so the port needs one
-# pass with the crypto tree switched off:
+# scripts/build-corecrypto-14.py --namespace renames the provider symbols that
+# collide with the kernel's undefined symbols, and reads that set from
+# build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf.
 #
-#   unixnu defconfig piano_seed_defconfig  →  unixnu build kernel
-#   build-corecrypto-14.py  (plain, then --namespace)
-#   unixnu defconfig piano_defconfig       →  unixnu build kernel
+# The build script cannot produce that kernel with the crypto tree enabled: the
+# archive-linking block is gated on XNU_SOURCE_CORECRYPTO14, and enabling it also
+# makes the script require build/corecrypto-2023/libcorecrypto_kernel_noasm-namespaced.a,
+# which is the very file this pass exists to create. So the seed pass switches the
+# crypto tree off, and with it every board driver archive, leaving a plain XNU.
 #
-# This file is not a device configuration. Do not ship a kernel built from it.
+# This is not a device configuration. Do not ship a kernel built from it.
 
-CONFIG_XNU_ARM_DT_PLATFORM=y
-
-CONFIG_XNU_SOURCE_CORECRYPTO14=y
+CONFIG_XNU_SOURCE_CORECRYPTO14=n
 CONFIG_XNU_SOURCE_PTHREAD=n
+CONFIG_XNU_ARM_DT_PLATFORM=n
 CONFIG_XNU_ARMCPU=n
 CONFIG_XNU_NATIVE_UFS=n
 CONFIG_XNU_NATIVE_AES=n
@@ -48,5 +45,5 @@ CONFIG_XNU_NATIVE_ADRENO=n
 CONFIG_XNU_ARMVIRT_PLATFORM=n
 
 CONFIG_XNU_CRYPTO_BOOTSTRAP="source"
-CONFIG_XNU_EXTRA_LD_ARCHIVES="-Wl,-force_load,{tree}/build/piano-display-stub/libPianoDisplayStub.a"
+CONFIG_XNU_EXTRA_LD_ARCHIVES=""
 CONFIG_XNU_OWNER_DATA_VOLUME_UUID="00000000-0000-0000-0000-000000000000"

@@ -1,54 +1,66 @@
 # Kernel configuration of the piano image. CONFIG_XNU_<NAME> becomes XNU_<NAME> for the kernel build.
 #
-# First pass: bring the source-built 4 KiB-page XNU up to the video console on
-# the tablet and report the genuine missing-driver panic. That is the same
-# milestone the sheng port used, and it deliberately leaves out every component
-# that only the original userland image needs.
+# First pass: bring the source-built 4 KiB-page XNU up on the tablet and report
+# the genuine missing-driver panic. That is the milestone the sheng port used,
+# and it deliberately leaves out every component the original userland needs.
 #
-# The build script enforces a dependency graph between these switches, so the
-# set below is closed under it:
+# The build script enforces a dependency graph between these switches, and it
+# also requires a compiled archive for every driver switch that is on. The
+# archives are compiled from drivers/ of the base repository by
+# scripts/build-arm-driver.py, against the kernel's recorded compile command.
+# The set below is closed under both rules:
 #
 #   ARMCPU            needs SOURCE_CORECRYPTO14 and a real platform driver
-#   SOURCE_PTHREAD    needs SOURCE_CORECRYPTO14
-#   SOURCE_MOCKFS     needs ARMCPU and SOURCE_PTHREAD
-#   NATIVE_AES        needs CRYPTO_BOOTSTRAP=prelinked and SOURCE_CORECRYPTO14
-#   NATIVE_RAM_BLOCK  needs NATIVE_AES
 #   NATIVE_ARCH_TIMER needs ARMCPU
+#
+# Archives each enabled switch needs (CI builds them in this order):
+#   SOURCE_CORECRYPTO14  build/corecrypto-2023/libcorecrypto_kernel_noasm-namespaced.a
+#   ARM_DT_PLATFORM      build/armdt-platform/libArmDTPlatform.a
+#   ARMCPU               build/armcpu/libArmCpu.a
 
 CONFIG_XNU_SOURCE_CORECRYPTO14=y
-CONFIG_XNU_SOURCE_PTHREAD=y
 CONFIG_XNU_ARM_DT_PLATFORM=y
 CONFIG_XNU_ARMCPU=y
-CONFIG_XNU_NATIVE_UFS=y
-CONFIG_XNU_NATIVE_AES=y
-CONFIG_XNU_NATIVE_RAM_BLOCK=y
-CONFIG_XNU_TRUST_CACHE_RUNTIME=y
-CONFIG_XNU_SOURCE_MOCKFS=y
-CONFIG_XNU_NATIVE_CS_HASH_CACHE=y
-CONFIG_XNU_DT_PANIC_REGION=y
-CONFIG_XNU_ZONE_PGZ_ALIGNMENT_PROBE=y
 CONFIG_XNU_NATIVE_ARCH_TIMER=y
 CONFIG_XNU_NATIVE_PAN=y
-CONFIG_XNU_NATIVE_LEGACY_DISPLAY=n
+CONFIG_XNU_DT_PANIC_REGION=y
+CONFIG_XNU_TRUST_CACHE_RUNTIME=y
+CONFIG_XNU_NATIVE_CS_HASH_CACHE=y
 
 CONFIG_XNU_CRYPTO_BOOTSTRAP="prelinked"
-CONFIG_XNU_EXTRA_LD_ARCHIVES="-Wl,-force_load,{tree}/build/piano-display-stub/libPianoDisplayStub.a"
+CONFIG_XNU_EXTRA_LD_ARCHIVES=""
 
-# Off for the first pass, and each one names the component it needs:
+# Off for this pass. Each line names what it would require:
 #
-#   OWNER_ROOT_AUDIT     requires VERIFIED_ROOT_PROBE, which needs the sheng
-#                        verified-root archive; that archive is built by sheng's
-#                        own kits, not by anything piano has.
-#   OWNER_ROOT_TRUST     requires OWNER_ROOT_AUDIT and NATIVE_VIRTIO_BLOCK.
-#   OWNER_CACHE_*        require OWNER_ROOT_TRUST (mounting the original root).
-#   OWNER_BOOT_MANIFEST  requires OWNER_CACHE_STARTUP.
-#   OWNER_DATA_MOUNT     requires OWNER_BOOT_MANIFEST.
-#   OWNER_UNION_SYSTEMOS requires OWNER_CACHE_STARTUP.
-#   BOOT_PROGRESS        requires OWNER_ROOT_AUDIT and NATIVE_VIRTIO_BLOCK.
-#   NATIVE_VIRTIO_BLOCK  there is no virtio transport on this board.
-#   SHENG_PMGR           sheng's SM8550 PMGR/clock integration.
-#   NATIVE_MOBILE_DISPLAY sheng's SM8550 DPU driver; piano is sm8750-dpu.
-#   NATIVE_ADRENO        sheng's A740 GPU kit; piano has an Adreno 830.
+#   SOURCE_PTHREAD        build/libpthread-kernel/libpthread_kernel.a
+#   SOURCE_MOCKFS         ARMCPU and SOURCE_PTHREAD, plus the mockfs fixture
+#   NATIVE_UFS            build/native-ufs/libNativeUfs.a; the UFS driver still
+#                         needs piano-specific clock and power integration
+#   NATIVE_AES            build/native-aes/libNativeAES.a
+#   NATIVE_RAM_BLOCK      NATIVE_AES
+#   NATIVE_LEGACY_DISPLAY build/native-legacy-display/libNativeLegacyDisplay.late.a,
+#                         which sheng's script qualifies against an exact original
+#                         IOMobileFramebufferLegacy candidate; piano has none, so
+#                         the probe hooks stay no-ops
+#   NATIVE_MOBILE_DISPLAY sheng's SM8550 DPU driver; piano is sm8750-dpu
+#   NATIVE_ADRENO         sheng's A740 GPU kit; piano has an Adreno 830
+#   NATIVE_VIRTIO_BLOCK   no virtio transport on this board
+#   OWNER_* and BOOT_PROGRESS
+#                         the original-userland mount chain, which needs
+#                         VERIFIED_ROOT_PROBE and NATIVE_VIRTIO_BLOCK
+CONFIG_XNU_SOURCE_PTHREAD=n
+CONFIG_XNU_SOURCE_MOCKFS=n
+CONFIG_XNU_NATIVE_UFS=n
+CONFIG_XNU_NATIVE_AES=n
+CONFIG_XNU_NATIVE_RAM_BLOCK=n
+CONFIG_XNU_NATIVE_LEGACY_DISPLAY=n
+CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
+CONFIG_XNU_NATIVE_ADRENO=n
+CONFIG_XNU_NATIVE_VIRTIO_BLOCK=n
+CONFIG_XNU_NATIVE_VIRTIO_CONSOLE=n
+CONFIG_XNU_SHENG_PMGR=n
+CONFIG_XNU_ARMVIRT_PLATFORM=n
+CONFIG_XNU_ZONE_PGZ_ALIGNMENT_PROBE=n
 CONFIG_XNU_VERIFIED_ROOT_PROBE=n
 CONFIG_XNU_OWNER_ROOT_AUDIT=n
 CONFIG_XNU_OWNER_ROOT_TRUST=n
@@ -58,12 +70,6 @@ CONFIG_XNU_OWNER_BOOT_MANIFEST=n
 CONFIG_XNU_OWNER_DATA_MOUNT=n
 CONFIG_XNU_OWNER_UNION_SYSTEMOS=n
 CONFIG_XNU_BOOT_PROGRESS=n
-CONFIG_XNU_NATIVE_VIRTIO_BLOCK=n
-CONFIG_XNU_NATIVE_VIRTIO_CONSOLE=n
-CONFIG_XNU_SHENG_PMGR=n
-CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
-CONFIG_XNU_NATIVE_ADRENO=n
-CONFIG_XNU_ARMVIRT_PLATFORM=n
 
 # Kept because the guards read it even when OWNER_DATA_MOUNT is off. A scratch
 # Data volume UUID has to be generated once the userland path is enabled;

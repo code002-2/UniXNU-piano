@@ -1,11 +1,19 @@
 name: build-piano-kernel
 
 # Builds the XNU kernel for the Xiaomi Pad 8 Pro (piano, SM8750) on an Apple
-# Silicon macOS runner, which is what the UniXNU kernel step requires: it drives
-# xnu's makefiles with `xcodebuild` and the iphoneos SDK, and generates its Mach
-# stubs with Apple's MIG, which is not available outside Xcode.
+# Silicon macOS runner, because the UniXNU kernel step requires macOS: it drives
+# xnu's makefiles with xcodebuild and the iPhoneOS SDK, and generates its Mach
+# stubs with Apple's MIG, which ships only inside Xcode.
 #
-# The output is the prelinked kernel.macho the UniXNU payload step consumes.
+# The step order is forced by two things in scripts/build-xnu-4k-baseline.sh:
+#
+#  * the archive-linking block is gated on XNU_SOURCE_CORECRYPTO14, and with the
+#    crypto tree on, the script also requires the namespaced corecrypto archive;
+#  * that archive is generated from the built kernel's undefined symbols.
+#
+# So the workflow builds a plain seed kernel first, derives the corecrypto
+# provider from it, compiles the driver archives it needs, and only then builds
+# the shipping kernel. See KERNEL-BUILD.md.
 
 on:
   workflow_dispatch:
@@ -15,7 +23,6 @@ on:
       - 'board.toml'
       - 'configs/**'
       - 'scripts/**'
-      - 'package/**'
       - '.github/workflows/build-kernel.yml'
 
 permissions:
@@ -38,7 +45,6 @@ jobs:
           uname -m
           xcodebuild -version
           xcode-select -p
-          ls /Applications | grep -i '^Xcode' || true
           xcrun -sdk iphoneos -find mig || echo 'mig not found for iphoneos'
           xcrun -sdk iphoneos -find iig || echo 'iig not found for iphoneos'
 
@@ -73,23 +79,11 @@ jobs:
         working-directory: UniXNU
         run: ./unixnu ipsw fetch
 
-      - name: Assemble the tree and build the display probe archive
-        working-directory: UniXNU
-        # bsd_init.c declares the display probe hooks under
-        # '#if DEVELOPMENT || DEBUG', which the kernel configuration always
-        # takes, so they must resolve even though piano has no display provider
-        # yet. stubs/PianoDisplayProbe.c supplies the 'no provider' versions and
-        # configs/*_defconfig link it through CONFIG_XNU_EXTRA_LD_ARCHIVES.
-        run: |
-          ./unixnu tree
-          bash ../UniXNU-piano/scripts/build-piano-display-stub.sh out/piano/tree ../UniXNU-piano
-
       - name: Seed kernel build for the corecrypto symbol table
         working-directory: UniXNU
-        # build-corecrypto-14.py --namespace reads the kernel's undefined symbols
-        # to decide which provider symbols to rename. A crypto-enabled build
-        # cannot link before that archive exists, so this pass runs with the
-        # crypto tree switched off. See configs/piano_seed_defconfig.
+        # The crypto tree is off here on purpose: with it on, the build script
+        # requires the namespaced archive that this pass exists to produce. See
+        # configs/piano_seed_defconfig.
         run: |
           ./unixnu defconfig piano_seed_defconfig -D ../UniXNU-piano
           ./unixnu build kernel || echo "seed pass did not finish; the object file is what matters"
@@ -99,12 +93,6 @@ jobs:
 
       - name: Build the pinned corecrypto provider
         working-directory: UniXNU
-        # With XNU_SOURCE_CORECRYPTO14 the kernel links the source corecrypto
-        # provider, and the build script requires this archive to exist:
-        #   build/corecrypto-2023/libcorecrypto_kernel_noasm-namespaced.a
-        # UniXNU produces it with scripts/build-corecrypto-14.py, which nothing
-        # in the driver calls, so the CI runs it explicitly: plain first, then
-        # the namespaced variant.
         run: |
           ./unixnu tree
           workspace=out/piano/tree
@@ -114,6 +102,17 @@ jobs:
           ( cd "$workspace" && python3 scripts/build-corecrypto-14.py )
           ( cd "$workspace" && python3 scripts/build-corecrypto-14.py --namespace )
           ls -l "$workspace/build/corecrypto-2023/"*.a
+
+      - name: Build the driver archives
+        working-directory: UniXNU
+        # scripts/build-arm-driver.py compiles drivers/<name>/<name>.cpp from the
+        # base repository against the kernel's recorded compile command, and
+        # archives the result where the build script expects it.
+        run: |
+          workspace=out/piano/tree
+          ( cd "$workspace" && python3 scripts/build-arm-driver.py ArmDTPlatform )
+          ( cd "$workspace" && python3 scripts/build-arm-driver.py ArmCpu )
+          ls -l "$workspace/build/armdt-platform/" "$workspace/build/armcpu/"
 
       - name: Build and prelink the kernel
         working-directory: UniXNU
@@ -132,7 +131,7 @@ jobs:
           else
             echo "kernel.macho was not produced" | tee ../artifacts/MISSING.txt
           fi
-          find out/piano/build/xnu -name 'mach.development.bcm2837*' -type f 2>/dev/null \
+          find out/piano/tree/build/xnu -name 'mach.development.bcm2837*' -type f 2>/dev/null \
             -exec cp {} ../artifacts/ \; || true
           cp -r out/piano/logs ../artifacts/logs 2>/dev/null || true
           ls -l ../artifacts

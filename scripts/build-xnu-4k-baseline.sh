@@ -49,6 +49,33 @@ for PATCH in "$ROOT"/patches/xnu/*.patch "$ROOT"/kits/NativePrelink/patches/*.pa
     git -C .cache/xnu-work apply "$PATCH"
   fi
 done
+# piano: the display probe hooks have to exist even though this board has no
+# display provider yet. bsd_init.c declares native_mobile_graphics_load_probe()
+# inside '#if DEVELOPMENT || DEBUG', which this configuration always takes, so
+# it references native_legacy_display_probe, native_mobile_graphics_client_probe
+# and native_mobile_graphics_probe_checkpoint unconditionally. They are appended
+# here instead of shipped as a patch because the device repository's patches/
+# would replace the base repository's patches/xnu module (49 patches) rather than
+# add to it, and the tail of the file is outside every patch's context.
+PIANO_BSD_INIT=$ROOT/.cache/xnu-work/bsd/kern/bsd_init.c
+if ! grep -q 'piano_display_probe_stub' "$PIANO_BSD_INIT"; then
+  cat >> "$PIANO_BSD_INIT" <<'PIANO_DISPLAY_STUB'
+
+/* piano_display_probe_stub: see scripts/build-xnu-4k-baseline.sh. */
+void native_legacy_display_probe(void)
+{
+	kprintf("piano: native_legacy_display_probe: no display provider on this board yet\n");
+}
+void native_mobile_graphics_client_probe(void)
+{
+	kprintf("piano: native_mobile_graphics_client_probe: no display provider on this board yet\n");
+}
+void native_mobile_graphics_probe_checkpoint(void)
+{
+	kprintf("piano: native_mobile_graphics_probe_checkpoint: mobile graphics path\n");
+}
+PIANO_DISPLAY_STUB
+fi
 export XNU_AVAILABILITY_PL=$ROOT/.cache/fakeroot/usr/local/libexec/availability.pl
 python3 scripts/prepare-xnu-source.py
 BOOT_PROGRESS=${XNU_BOOT_PROGRESS:-0}

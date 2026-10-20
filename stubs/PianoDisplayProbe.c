@@ -21,7 +21,12 @@
  * got that far. Replacing this archive with a real provider is what turns the
  * framebuffer into a console.
  */
-#include <sys/systm.h>
+/*
+ * The archive is compiled against the iPhoneOS SDK only, so it must not include
+ * XNU's own headers (sys/systm.h lives in the kernel tree, not in the SDK).
+ * printf inside the kernel is XNU's kernel printf and has the usual signature.
+ */
+extern int printf(const char *format, ...);
 
 int
 native_legacy_display_probe_reached(void)

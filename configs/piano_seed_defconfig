@@ -1,0 +1,52 @@
+# Seed configuration: exists only to give the corecrypto namespacing a kernel to
+# read symbols from.
+#
+# scripts/build-corecrypto-14.py --namespace compares the plain provider's
+# undefined symbols against the kernel's (it runs `xcrun nm -U` on
+# build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf)
+# and then defines the colliding names to a cc14_ prefix. That kernel cannot
+# exist before the archive does, because a crypto-enabled build refuses to link
+# without it (the build script tests for the archive), so the port needs one
+# pass with the crypto tree switched off:
+#
+#   unixnu defconfig piano_seed_defconfig  →  unixnu build kernel
+#   build-corecrypto-14.py  (plain, then --namespace)
+#   unixnu defconfig piano_defconfig       →  unixnu build kernel
+#
+# This file is not a device configuration. Do not ship a kernel built from it.
+
+CONFIG_XNU_ARM_DT_PLATFORM=y
+
+CONFIG_XNU_SOURCE_CORECRYPTO14=n
+CONFIG_XNU_SOURCE_PTHREAD=n
+CONFIG_XNU_ARMCPU=n
+CONFIG_XNU_NATIVE_UFS=n
+CONFIG_XNU_NATIVE_AES=n
+CONFIG_XNU_NATIVE_RAM_BLOCK=n
+CONFIG_XNU_TRUST_CACHE_RUNTIME=n
+CONFIG_XNU_SOURCE_MOCKFS=n
+CONFIG_XNU_NATIVE_CS_HASH_CACHE=n
+CONFIG_XNU_DT_PANIC_REGION=n
+CONFIG_XNU_ZONE_PGZ_ALIGNMENT_PROBE=n
+CONFIG_XNU_NATIVE_ARCH_TIMER=n
+CONFIG_XNU_NATIVE_PAN=n
+CONFIG_XNU_NATIVE_LEGACY_DISPLAY=n
+CONFIG_XNU_BOOT_PROGRESS=n
+CONFIG_XNU_VERIFIED_ROOT_PROBE=n
+CONFIG_XNU_OWNER_ROOT_AUDIT=n
+CONFIG_XNU_OWNER_ROOT_TRUST=n
+CONFIG_XNU_OWNER_CACHE_MOUNT=n
+CONFIG_XNU_OWNER_CACHE_STARTUP=n
+CONFIG_XNU_OWNER_BOOT_MANIFEST=n
+CONFIG_XNU_OWNER_DATA_MOUNT=n
+CONFIG_XNU_OWNER_UNION_SYSTEMOS=n
+CONFIG_XNU_NATIVE_VIRTIO_BLOCK=n
+CONFIG_XNU_NATIVE_VIRTIO_CONSOLE=n
+CONFIG_XNU_SHENG_PMGR=n
+CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
+CONFIG_XNU_NATIVE_ADRENO=n
+CONFIG_XNU_ARMVIRT_PLATFORM=n
+
+CONFIG_XNU_CRYPTO_BOOTSTRAP="source"
+CONFIG_XNU_EXTRA_LD_ARCHIVES=""
+CONFIG_XNU_OWNER_DATA_VOLUME_UUID="00000000-0000-0000-0000-000000000000"

@@ -70,6 +70,24 @@ jobs:
         working-directory: UniXNU
         run: ./unixnu ipsw fetch
 
+      - name: Build the pinned corecrypto provider
+        working-directory: UniXNU
+        # With XNU_SOURCE_CORECRYPTO14 the kernel links the source corecrypto
+        # provider, and the build script requires this archive to exist:
+        #   build/corecrypto-2023/libcorecrypto_kernel_noasm-namespaced.a
+        # UniXNU produces it with scripts/build-corecrypto-14.py, which nothing
+        # in the driver calls, so the CI runs it explicitly. It needs the
+        # snapshot at the pinned revision with a clean working tree, and uses
+        # xcrun/plutil from Xcode.
+        run: |
+          ./unixnu tree
+          workspace=out/piano/tree
+          git clone --quiet https://github.com/ONLYA/corecrypto-2023 "$workspace/refer/corecrypto-2023"
+          git -C "$workspace/refer/corecrypto-2023" checkout --quiet 11fba65b12d8830630e248dfa8344caf8b065f26
+          git -C "$workspace/refer/corecrypto-2023" rev-parse HEAD
+          ( cd "$workspace" && python3 scripts/build-corecrypto-14.py --namespace )
+          ls -l "$workspace/build/corecrypto-2023/"*.a
+
       - name: Build and prelink the kernel
         working-directory: UniXNU
         run: ./unixnu build kernel

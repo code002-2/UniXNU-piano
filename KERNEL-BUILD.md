@@ -133,6 +133,52 @@ The panic screen is off. `payload.panic_screen` needs
 with `scripts/xnu-panic-screen.c`, and it draws through the legacy display path
 that is a no-op on this board.
 
+## Firmware
+
+SunUEFI's piano platform now carries the three UniXNU modules, added the way
+`uefi-sheng` does it: the component list and the firmware-volume entries go into
+`uefi/platforms/pianoPkg/piano.dsc` and `pianoPkg/piano.fdf`, and into the same
+two files of `pianoProbePkg`, because `tools/prepare_product.py` generates
+`pianoProductPkg` by staging the *probe* package and rewriting `pianoProbe` to
+`pianoProduct`. `tools/build_stage0.sh` gained the two `PACKAGES_PATH` entries
+that make `UniXNUPkg` and `DarwinBootPkg` resolvable.
+
+The build is native on the tablet: SunUEFI's builder image only installs
+`clang lld llvm nasm acpica-tools` and sets `SUNUEFI_TOOLCHAIN_ROOT=/usr`, and
+the tablet has all of them, so no container is needed.
+
+| Artifact | Bytes | Note |
+| --- | --- | --- |
+| `SILICIUM_UEFI.fd` | 3,145,728 | firmware volume |
+| `PianoUEFI-product.img` | 28,897,280 | sha256 `43edda5ada09240c93e65209dbca900064f1e1f355dbede97ef743d1c027a0f3` |
+
+`UniXNU.efi`, `UniXNUDxe.efi` and `DarwinBoot.efi` are built, and the
+uncompressed `FVMAIN.Fv` (4,345,856 bytes) contains all three file GUIDs.
+Scanning `SILICIUM_UEFI.fd` for them fails, because `FVMAIN` sits inside the
+compressed `FVMAIN_COMPACT` volume — the firmware is there, the search was wrong.
+
+## Where the payload lives
+
+The tablet has no ESP and the payload has to be readable by the firmware, so it
+was placed on `modem_a` (`/dev/sde7`, 202 MiB vfat) as
+`\EFI\UniXNU\{unixnu.toml, Payloads/kernel.macho, Payloads/kernel.macho.adt}`,
+which is what UniXNU searches for. Two facts about that partition:
+
+- it held 181 MiB of stock modem firmware in `image/`, leaving 22 MiB free, so
+  that tree was removed to make room. The tablet has no baseband and `modem_b`
+  still exists; restoring it means flashing stock `modem_a`.
+- the copied kernel hashes to
+  `6912319adf0b623eb04987f2dbd29c4b5c9f97ca18b469571bd67c7815c86c07`, the same
+  file the CI produced.
+
+## Boot image, and why UniXNU's bootimg does not fit
+
+The stock `boot_a` is an Android boot image with **header version 4**
+(`kernel_size` 36,866,560). `unixnu bootimg` writes **version 0** and appends the
+device tree to the kernel, so it cannot reproduce this device's image; SunUEFI
+builds the boot image its own way and ships `PianoUEFI-product.img`, which is
+what a boot attempt should use.
+
 ## Still missing
 
 - A real legacy display provider, for the reason above.

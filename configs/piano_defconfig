@@ -1,0 +1,49 @@
+# Kernel configuration of the piano image. CONFIG_XNU_<NAME> becomes XNU_<NAME> for the kernel build.
+#
+# Mirrors sheng's configuration, which is the only known-good non-Apple ARM64
+# target, with the sheng-only pieces removed. The goal of the first pass is the
+# same as sheng's first pass: reach the video console and report the genuine
+# missing-driver panic, not a full userland boot.
+
+CONFIG_XNU_SOURCE_CORECRYPTO14=y
+CONFIG_XNU_SOURCE_PTHREAD=y
+CONFIG_XNU_ARM_DT_PLATFORM=y
+CONFIG_XNU_ARMCPU=y
+CONFIG_XNU_NATIVE_UFS=y
+CONFIG_XNU_NATIVE_AES=y
+CONFIG_XNU_NATIVE_RAM_BLOCK=y
+CONFIG_XNU_TRUST_CACHE_RUNTIME=y
+CONFIG_XNU_SOURCE_MOCKFS=y
+CONFIG_XNU_NATIVE_CS_HASH_CACHE=y
+CONFIG_XNU_OWNER_ROOT_AUDIT=y
+CONFIG_XNU_OWNER_ROOT_TRUST=y
+CONFIG_XNU_OWNER_CACHE_MOUNT=y
+CONFIG_XNU_OWNER_CACHE_STARTUP=y
+CONFIG_XNU_OWNER_BOOT_MANIFEST=y
+CONFIG_XNU_OWNER_DATA_MOUNT=y
+CONFIG_XNU_OWNER_UNION_SYSTEMOS=y
+CONFIG_XNU_DT_PANIC_REGION=y
+CONFIG_XNU_ZONE_PGZ_ALIGNMENT_PROBE=y
+CONFIG_XNU_NATIVE_ARCH_TIMER=y
+CONFIG_XNU_NATIVE_PAN=y
+CONFIG_XNU_BOOT_PROGRESS=y
+CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y
+
+CONFIG_XNU_CRYPTO_BOOTSTRAP="prelinked"
+# Pending: a scratch Data volume UUID has to be generated for this board.
+# sheng's value is deliberately not reused, because it names an existing volume.
+CONFIG_XNU_OWNER_DATA_VOLUME_UUID="00000000-0000-0000-0000-000000000000"
+CONFIG_XNU_EXTRA_LD_ARCHIVES=""
+
+# Not enabled for the first pass:
+#   SHENG_PMGR           the PMGR/clock integration of sheng's UFS root path
+#   VERIFIED_ROOT_PROBE  needs build/verified-root-os-xnu-bundle from sheng's kit
+#   NATIVE_VIRTIO_BLOCK  no virtio transport on this board
+#   NATIVE_MOBILE_DISPLAY  sheng's SM8550 DPU driver, the panel path is different
+#   NATIVE_ADRENO        sheng's A740 GPU kit, piano has an Adreno 830
+CONFIG_XNU_SHENG_PMGR=n
+CONFIG_XNU_VERIFIED_ROOT_PROBE=n
+CONFIG_XNU_NATIVE_VIRTIO_BLOCK=n
+CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
+CONFIG_XNU_NATIVE_ADRENO=n
+CONFIG_XNU_ARMVIRT_PLATFORM=n

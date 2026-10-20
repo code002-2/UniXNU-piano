@@ -1,0 +1,100 @@
+name: build-piano-kernel
+
+# Builds the XNU kernel for the Xiaomi Pad 8 Pro (piano, SM8750) on an Apple
+# Silicon macOS runner, which is what the UniXNU kernel step requires: it drives
+# xnu's makefiles with `xcodebuild` and the iphoneos SDK, and generates its Mach
+# stubs with Apple's MIG, which is not available outside Xcode.
+#
+# The output is the prelinked kernel.macho the UniXNU payload step consumes.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'board.toml'
+      - 'configs/**'
+      - 'scripts/**'
+      - 'package/**'
+      - '.github/workflows/build-kernel.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  kernel:
+    runs-on: macos-14          # Apple Silicon, Xcode 15.x with the iOS 17 SDK
+    timeout-minutes: 240
+
+    steps:
+      - name: Check out the device repository
+        uses: actions/checkout@v4
+        with:
+          path: UniXNU-piano
+
+      - name: Report the runner toolchain
+        run: |
+          sw_vers
+          uname -m
+          xcodebuild -version
+          xcode-select -p
+
+      - name: Install the host tools
+        run: |
+          brew install cmake ninja unifdef llvm mtools dtc
+          # unifdef and llvm are keg-only; unixnu looks in /opt/homebrew/opt/llvm/bin
+          # on its own, but PATH keeps the rest predictable.
+          echo "/opt/homebrew/opt/llvm/bin" >> "$GITHUB_PATH"
+          echo "/opt/homebrew/opt/unifdef/bin" >> "$GITHUB_PATH"
+
+      - name: Verify the tools unixnu checks for
+        run: |
+          for tool in git make clang cmake ninja unifdef mtools dtc xcodebuild; do
+            printf '%-10s %s\n' "$tool" "$(command -v "$tool" || echo MISSING)"
+          done
+
+      - name: Check out UniXNU
+        run: git clone --depth 1 https://github.com/UniXNU/UniXNU.git UniXNU
+
+      - name: Select the device repository
+        working-directory: UniXNU
+        run: |
+          ./unixnu defconfig piano_defconfig -D ../UniXNU-piano
+          ./unixnu status
+
+      - name: Fetch the Apple references
+        working-directory: UniXNU
+        run: ./unixnu fetch
+
+      - name: Fetch the target IPSW members
+        working-directory: UniXNU
+        run: ./unixnu ipsw fetch
+
+      - name: Build and prelink the kernel
+        working-directory: UniXNU
+        run: ./unixnu build kernel
+
+      - name: Record the result
+        working-directory: UniXNU
+        if: always()
+        run: |
+          mkdir -p ../artifacts
+          if [ -f out/piano/kernel/kernel.macho ]; then
+            cp out/piano/kernel/kernel.macho ../artifacts/
+            shasum -a 256 out/piano/kernel/kernel.macho | tee ../artifacts/kernel.macho.sha256
+          else
+            echo "kernel.macho was not produced" | tee ../artifacts/MISSING.txt
+          fi
+          find out/piano/build/xnu -name 'mach.development.bcm2837*' -type f 2>/dev/null \
+            -exec cp {} ../artifacts/ \; || true
+          cp -r out/piano/logs ../artifacts/logs 2>/dev/null || true
+          ls -l ../artifacts
+
+      - name: Upload the kernel
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: piano-kernel
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 14

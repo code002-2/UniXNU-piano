@@ -1,0 +1,12 @@
+# Generated output
+build/
+out/
+
+# Bring-up helper scripts. They are kept out of the repository on purpose: they
+# log in to the tablet with `sudo -S` and therefore contain its sudo password in
+# clear text. LINUX-BUILD.md describes what they do.
+recon/
+
+.DS_Store
+__pycache__/
+*.pyc

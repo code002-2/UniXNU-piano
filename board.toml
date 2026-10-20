@@ -1,0 +1,146 @@
+# Board description of the Xiaomi Pad 8 Pro (piano, SM8750), read by the unixnu build driver.
+#
+# Every value marked "observed" was read from the running device on 192.168.1.185
+# (Debian 13, kernel 7.2.6-piano, /sys/firmware/fdt). Values that still need a
+# device measurement are marked "pending".
+
+[board]
+name = "piano"
+soc = "SM8750"                      # qcom,sun / qcom,sunp / qcom,sun-mtp in the board DT
+description = "Xiaomi Pad 8 Pro"
+kit = "piano"                       # the package/ of this repository appears as kits/piano in the build tree
+
+# The target OS image. piano reuses the same unchanged iPad7,1 iPadOS 17.7.11
+# restore image sheng was qualified against: the Darwin ABI comes from the
+# kernelcache and the userland, not from the SoC, so the identity must stay
+# iPad7,1 for MobileGestalt and the prelinked kexts to agree.
+[ipsw]
+url = "https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw"
+product = "iPad7,1"
+version = "17.7.11"
+build = "21H461"
+device_class = "j120ap"
+chip_id = 0x8011
+board_id = 12
+fetch = ["KernelCache", "DeviceTree", "StaticTrustCache", "Cryptex1,SystemTrustCache"]
+
+[ipsw.sha256]
+"044-76040-038.dmg" = "3f99b859c9728379110b66657c7b15285bcb1925ad8b5726542e2cdcf8b1028d"
+"044-76034-038.dmg" = "b4908cde41d23e6bc05e6af51a2c9eeb00cf0f863a6a18b1600c96a3fd70414f"
+
+# The raw image for the userdata partition: the OS and SystemOS disk images of
+# the IPSW behind a manifest. first_lba and last_lba are the GPT entry
+# "userdata" on LUN 0, observed with sgdisk -p /dev/sda:
+#   34  3632128  30830586  103.8 GiB  A03A  userdata
+# The disk reports 4096-byte logical sectors, so lba_bytes is 4096, not 512.
+[userdata]
+first_lba = 0x376c00                # 3632128
+last_lba = 0x1d66ffa                # 30830586
+lba_bytes = 4096
+windows = [
+  { name = "OS", component = "OS" },
+  { name = "SystemOS", component = "Cryptex1,SystemOS" },
+]
+
+[kernel]
+defconfig = "piano_defconfig"
+
+# The prelink keeps the original Apple kexts of the target kernelcache and binds
+# the native kernel to their symbols. The tool, the kernel artefact and the
+# kernelcache pin are the same as sheng because the target IPSW is the same.
+[kernel.prelink]
+tool = "kits/NativePrelink/emit_prelink.py"
+kernel = "build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf"
+kernelcache_sha256 = "f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7"
+slide = "-0x1000000"
+early_security_init = "com.apple.driver.AppleMobileFileIntegrity=0xfffffff005ab4ae0"
+roots = [
+  "com.apple.AppleFSCompression.AppleFSCompressionTypeZlib",
+  "com.apple.driver.AppleARMPlatform",
+  "com.apple.driver.AppleARMWatchdogTimer",
+  "com.apple.driver.AppleAudioClockLibs",
+  "com.apple.driver.AppleEffaceableStorage",
+  "com.apple.driver.AppleIISController",
+  "com.apple.driver.AppleM2ScalerCSCDriver",
+  "com.apple.driver.AppleMobileFileIntegrity",
+  "com.apple.driver.ApplePMGR",
+  "com.apple.driver.IODARTFamily",
+  "com.apple.filesystems.apfs",
+  "com.apple.iokit.CoreAnalyticsFamily",
+  "com.apple.iokit.IOAVFamily",
+  "com.apple.iokit.IOAudio2Family",
+  "com.apple.iokit.IOCECFamily",
+  "com.apple.iokit.IOCryptoAcceleratorFamily",
+  "com.apple.iokit.IOGPUFamily",
+  "com.apple.iokit.IOHDCPFamily",
+  "com.apple.iokit.IOMobileGraphicsFamily",
+  "com.apple.iokit.IOReportFamily",
+  "com.apple.iokit.IOSlowAdaptiveClockingFamily",
+  "com.apple.iokit.IOStorageFamily",
+  "com.apple.iokit.IOSurface",
+  "com.apple.kec.Libm",
+  "com.apple.kec.corecrypto",
+  "com.apple.kext.AppleMatch",
+  "com.apple.kext.CoreTrust",
+  "com.apple.security.AppleImage4",
+  "com.apple.security.sandbox",
+  "com.apple.iokit.IOHIDFamily",
+  "com.apple.iokit.IOHIDEventDriver",
+]
+
+# There is no [firmware] section on purpose.
+#
+# sheng builds its firmware volume from a Mu-Silicium checkout. piano already has
+# a maintained EDK2 port with a working display, storage, input and handoff layer:
+# slwyts/Project-SunUEFI (uefi/platforms/pianoPkg). Rebuilding that from
+# Mu-Silicium would duplicate it, so the firmware step runs in ../SunUEFI
+# (./build.sh uefi) and only has to gain the Darwin loader:
+#
+#   - uefi/platforms/pianoPkg: add {tree}/drivers/DarwinBoot to the DSC
+#   - register a "Darwin" payload entry next to the existing Linux entry
+#
+# The boot image is SunUEFI's combined BOOT image (Android selector + UEFI),
+# not unixnu bootimg, so there is no [bootimg] section either.
+
+# The ramdisk of the boot image: a FAT volume with the UniXNU config, the
+# kernel, its device tree and the optional trust cache and Data seed.
+[payload]
+volume = "PIANOESP"
+size_mib = 192
+loader = "firmware"                 # DarwinBoot lives in the SunUEFI firmware volume
+title = "piano first boot: source 4K XNU to console"
+dram_size = "0x80000000"            # 2 GiB window from DRAM base 0x80000000
+panic_screen = true
+# Pending: the original static/System trust caches of the target IPSW are not
+# extracted yet, so no bundle hash is accepted here. Fill both entries in once
+# `unixnu ipsw fetch` has produced them.
+trust_cache_sha256 = []
+kernel_args = [
+  "-v",
+  "serial=3",
+  "debug=0x14e",
+  "kt_fixed_zones=120",
+  "offline-legacy-register=1",
+  "offline-legacy-gop=1",
+  "offline-legacy-unit-scale=2",
+  "offline-legacy-pm=1",
+  "offline-legacy-validate=1",
+  "offline-legacy-transfer=1",
+  "offline-legacy-cpu-present=1",
+  "offline-legacy-phase=4",
+  "boot-progress=2",
+  "armcpu-diagnostics=1",
+  "armcpu-spi-ipi=1",
+  "-no_slto_panic",
+]
+
+[payload.adt]
+tool = "scripts/make-piano-adt.py"
+chip_id = "207"                     # the identity of the target iPad7,1 restore, as sheng
+owned_memory_size = "0x130000000"   # 4.75 GiB contiguous window, 2 MiB aligned
+# root_match_volume_uuid is pending: it is the UUID of the OS volume the kernel
+# will mount, and there is no piano OS installation yet.
+cpu_regs = "0,0x100,0x200,0x300,0x400,0x500,0x10000,0x10100"   # cpus/cpu@0 .. cpu@10100
+packed_data_ramdisk = true
+ipad_identity = true
+unique_chip_id = "required"         # the platform seed is not stored in any repository

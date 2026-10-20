@@ -234,17 +234,18 @@ Two consequences for the next attempt:
   memory map that differs from what `MemoryMapLib` publishes reports
   `EFI_NOT_READY` without retaining anything.
 
-## Two things that cost a diagnostic build
+## One thing that cost a diagnostic build
 
-1. **Editing the workspace does nothing.** `tools/firmware_workspace.py` copies
-   `uefi/` (with `tools`, `config`, `vendor`, `patches`) from the repository root
-   into `build/firmware-workspace` with `shutil.copy2` on every build, so a change
-   made under `build/firmware-workspace/uefi/...` is overwritten before the
-   compiler sees it. Platform edits belong in the repository root.
-2. **The boot option persists.** `UniXNUDxe` writes a `Boot####` entry and moves it
-   to the front of `BootOrder`; that variable lives in the `uefivarstore`
-   partition, so it survives reboots and a later firmware that no longer contains
-   the application still gets selected by BDS unless the variable is cleared.
+**Editing the workspace does nothing.** `tools/firmware_workspace.py` copies
+`uefi/` (with `tools`, `config`, `vendor`, `patches`) from the repository root
+into `build/firmware-workspace` with `shutil.copy2` on every build, so a change
+made under `build/firmware-workspace/uefi/...` is overwritten before the compiler
+sees it. Platform edits belong in the repository root.
+
+An earlier draft of this note also blamed a persisted `Boot####` variable. That
+is wrong: `piano.dsc` sets `PcdEmuVariableNvModeEnable|TRUE`, so UEFI variables
+are emulated in RAM and do not survive a power cycle. The whole difference was
+the overwritten copy.
 
 ## Still missing
 
